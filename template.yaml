@@ -151,3 +151,4 @@ Outputs:
   UsersTableName:
     Description: DynamoDB Table Name
     Value: !Ref UsersTable
+
