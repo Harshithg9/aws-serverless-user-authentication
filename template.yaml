@@ -1,0 +1,153 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: User Authentication Project using Lambda, DynamoDB, JWT and API Gateway
+
+Resources:
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Users
+      BillingMode: PAY_PER_REQUEST
+
+      AttributeDefinitions:
+        - AttributeName: username
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: username
+          KeyType: HASH
+
+  AuthApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+
+      Auth:
+        DefaultAuthorizer: JWTAuthorizer
+
+        Authorizers:
+          JWTAuthorizer:
+            FunctionArn: !GetAtt AuthorizerFunction.Arn
+            FunctionPayloadType: TOKEN
+            Identity:
+              Header: Authorization
+
+  RegisterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: register-function
+      CodeUri: register/
+      Handler: com.harshit.register.RegisterHandler::handleRequest
+      Runtime: java21
+      MemorySize: 512
+      Timeout: 30
+
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+
+      Events:
+        RegisterApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuthApi
+            Path: /register
+            Method: post
+            Auth:
+              Authorizer: NONE
+
+  LoginFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: login-function
+      CodeUri: login/
+      Handler: com.harshit.login.LoginHandler::handleRequest
+      Runtime: java21
+      MemorySize: 512
+      Timeout: 30
+
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:jwt-secret*
+
+      Events:
+        LoginApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuthApi
+            Path: /login
+            Method: post
+            Auth:
+              Authorizer: NONE
+
+  AuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: authorizer-function
+      CodeUri: authorizer/
+      Handler: com.harshit.authorizer.AuthorizerHandler::handleRequest
+      Runtime: java21
+      MemorySize: 512
+      Timeout: 30
+
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:jwt-secret*
+
+      Events:
+        AuthorizerPermission:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuthApi
+            Path: /authorizer
+            Method: get
+            Auth:
+              Authorizer: NONE
+
+  ProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: profile-function
+      CodeUri: profile/
+      Handler: com.harshit.profile.ProfileHandler::handleRequest
+      Runtime: java21
+      MemorySize: 512
+      Timeout: 30
+
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+
+      Events:
+        ProfileApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuthApi
+            Path: /profile
+            Method: get
+
+Outputs:
+
+  RegisterApi:
+    Description: Register API
+    Value: !Sub "https://${AuthApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/register"
+
+  LoginApi:
+    Description: Login API
+    Value: !Sub "https://${AuthApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/login"
+
+  ProfileApi:
+    Description: Profile API
+    Value: !Sub "https://${AuthApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/profile"
+
+  UsersTableName:
+    Description: DynamoDB Table Name
+    Value: !Ref UsersTable
